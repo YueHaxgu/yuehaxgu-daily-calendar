@@ -20,7 +20,6 @@
       <section class="workspace" aria-label="每日记录日历">
         <header class="app-header">
           <div class="brand">
-            <span class="brand-mark" aria-hidden="true">✓</span>
             <div>
               <p class="eyebrow">Daily Log</p>
               <h1>每日记录日历</h1>
@@ -46,15 +45,6 @@
                 <span id="cloudAccountStatus">未登录</span>
               </span>
             </button>
-            <div class="data-menu">
-              <button class="tool-button" id="dataMenuButton" type="button">数据管理 ▾</button>
-              <div class="data-dropdown" id="dataDropdown" hidden>
-                <button type="button" data-action="export-month">📄 导出本月</button>
-                <button type="button" data-action="export-all">💾 备份全部</button>
-                <button type="button" data-action="import" class="danger">📂 恢复备份</button>
-              </div>
-              <input id="restoreFile" type="file" accept="application/json,.json" hidden />
-            </div>
             <div class="month-controls" aria-label="月份切换">
               <button class="icon-button" id="prevMonth" type="button" aria-label="上个月" title="上个月">
                 <span aria-hidden="true">‹</span>

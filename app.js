@@ -4,7 +4,8 @@ const themeStorageKey = "daily-calendar-theme";
 const defaultCategories = ["工作", "学习", "生活", "运动", "阅读"];
 const fallbackCategory = "生活";
 const allCategory = "全部";
-const categoryColors = ["#4dd4ac", "#7dd3fc", "#f59e57", "#a78bfa", "#fb7185", "#facc15", "#60a5fa"];
+const darkCategoryColors = ["#4dd4ac", "#7dd3fc", "#f59e57", "#a78bfa", "#fb7185", "#facc15", "#60a5fa"];
+const lightCategoryColors = ["#0f766e", "#1d4ed8", "#a16207", "#6d28d9", "#be123c", "#4d7c0f", "#0369a1"];
 const supabaseUrl = "https://motlvavfznjenkecyshu.supabase.co";
 const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1vdGx2YXZmem5qZW5rZWN5c2h1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyMDI4ODMsImV4cCI6MjA5OTc3ODg4M30.CADb-ywgy6wlhqojJGjAohPBL2Ujj0e3uDq_kTnSNv0";
 const cloudStateTable = "calendar_state";
@@ -25,9 +26,6 @@ const categoryChips = document.querySelector("#categoryChips");
 const searchInput = document.querySelector("#searchInput");
 const resetFilters = document.querySelector("#resetFilters");
 const filterAllButton = document.querySelector("#filterAllButton");
-const restoreFile = document.querySelector("#restoreFile");
-const dataMenuButton = document.querySelector("#dataMenuButton");
-const dataDropdown = document.querySelector("#dataDropdown");
 const themeToggle = document.querySelector("#themeToggle");
 const entryForm = document.querySelector("#entryForm");
 const entryText = document.querySelector("#entryText");
@@ -91,6 +89,7 @@ applyTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark"
 themeToggle?.addEventListener("click", () => {
   const nextTheme = document.documentElement.dataset.theme === "light" ? "dark" : "light";
   applyTheme(nextTheme, true);
+  render();
   showToast(nextTheme === "light" ? "已切换为白天模式" : "已切换为黑夜模式", "info");
 });
 
@@ -148,121 +147,6 @@ resetFilters.addEventListener("click", () => {
   searchInput.value = "";
   render();
 });
-
-dataMenuButton.addEventListener("click", (e) => {
-  e.stopPropagation();
-  dataDropdown.hidden = !dataDropdown.hidden;
-});
-
-document.addEventListener("click", () => {
-  dataDropdown.hidden = true;
-});
-
-dataDropdown.addEventListener("click", (e) => {
-  e.stopPropagation();
-  const btn = e.target.closest("[data-action]");
-  const action = btn ? btn.dataset.action : null;
-  if (!action) return;
-  dataDropdown.hidden = true;
-  if (action === "export-month") {
-    doExportMonth();
-  } else if (action === "export-all") {
-    doExportAll();
-  } else if (action === "import") {
-    restoreFile.click();
-  }
-});
-
-function doExportMonth() {
-  const data = {
-    month: getMonthPrefix(),
-    exportedAt: new Date().toISOString(),
-    entries: Object.entries(entriesByDate)
-      .filter(([dateKey]) => dateKey.startsWith(getMonthPrefix()))
-      .flatMap(([date, entries]) => entries.map((entry) => ({ date, ...entry }))),
-  };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `daily-log-${getMonthPrefix()}.json`;
-  link.click();
-  URL.revokeObjectURL(url);
-  showToast("\u672C\u6708\u8BB0\u5F55\u5DF2\u5BFC\u51FA", "success");
-}
-
-function doExportAll() {
-  const data = {
-    exportedAt: new Date().toISOString(),
-    categories,
-    entries: Object.entries(entriesByDate).flatMap(([date, entries]) =>
-      entries.map((entry) => ({ date, ...entry }))
-    ),
-  };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `daily-log-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  link.click();
-  URL.revokeObjectURL(url);
-  showToast("\u5168\u90E8\u6570\u636E\u5DF2\u5907\u4EFD", "success");
-}
-
-// Backup merged into data menu
-
-// import handled via data menu dropdown
-
-restoreFile.addEventListener("change", (event) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const data = JSON.parse(e.target.result);
-      if (!data.entries || !Array.isArray(data.entries)) {
-        alert("备份文件格式无效：缺少 entries 数组。");
-        return;
-      }
-      const imported = {};
-      let replaceCount = 0;
-      for (const entry of data.entries) {
-        if (!entry.date || !entry.id || !entry.text) continue;
-        const dateKey = entry.date;
-        const normalEntry = {
-          id: entry.id,
-          category: entry.category ?? fallbackCategory,
-          mood: entry.mood ?? "平静",
-          important: entry.important === true,
-          time: entry.time ?? "",
-          text: entry.text,
-          createdAt: entry.createdAt ?? new Date().toISOString(),
-          updatedAt: entry.updatedAt,
-        };
-        if (!imported[dateKey]) imported[dateKey] = [];
-        imported[dateKey].push(normalEntry);
-        replaceCount++;
-      }
-      if (replaceCount === 0) {
-        alert("备份文件中没有找到有效记录。");
-        return;
-      }
-      entriesByDate = imported;
-      if (Array.isArray(data.categories)) {
-        categories = normalizeCategories(data.categories);
-        saveCategories();
-      }
-      saveEntries();
-      render();
-      showToast("\u6062\u590D\u5907\u4EFD\u6210\u529F\uFF0C\u5171" + replaceCount + "\u6761\u8BB0\u5F55", "success");
-    } catch {
-      alert("备份文件解析失败，请检查文件内容。");
-    }
-  };
-  reader.readAsText(file);
-  event.target.value = "";
-});
-
 
 const categoryModal = document.querySelector("#categoryModal");
 const modalClose = document.querySelector("#modalClose");
@@ -780,8 +664,9 @@ function getTopCategories(entries) {
 }
 
 function getCategoryColor(category) {
-  const index = [...category].reduce((sum, char) => sum + char.charCodeAt(0), 0) % categoryColors.length;
-  return categoryColors[index];
+  const palette = document.documentElement.dataset.theme === "light" ? lightCategoryColors : darkCategoryColors;
+  const index = [...category].reduce((sum, char) => sum + char.charCodeAt(0), 0) % palette.length;
+  return palette[index];
 }
 
 function getMonthPrefix() {
@@ -870,10 +755,10 @@ document.querySelector(".summary-grid")?.addEventListener("click", (e) => {
 
 function openMonthEntriesModal() {
   const prefix = getMonthPrefix();
-  const allEntries = Object.entries(entriesByDate)
+  const visibleEntries = Object.entries(entriesByDate)
     .filter(([dateKey]) => dateKey.startsWith(prefix))
-    .flatMap(([dateKey, entries]) => 
-      entries.map((entry) => ({ ...entry, date: dateKey }))
+    .flatMap(([dateKey, entries]) =>
+      filterEntries(entries).map((entry) => ({ ...entry, date: dateKey }))
     )
     .sort((a, b) => {
       // Sort by date (newest first), then by time (newest first)
@@ -881,10 +766,11 @@ function openMonthEntriesModal() {
       return (b.time || "23:59").localeCompare(a.time || "23:59");
     });
 
-  monthEntriesTitle.textContent = "本月记录 (" + allEntries.length + " 条)";
+  const titlePrefix = selectedFilter === allCategory ? "本月记录" : selectedFilter + " · 本月记录";
+  monthEntriesTitle.textContent = titlePrefix + " (" + visibleEntries.length + " 条)";
   monthEntriesBody.innerHTML = "";
 
-  if (allEntries.length === 0) {
+  if (visibleEntries.length === 0) {
     monthEntriesBody.innerHTML = `<p class="empty-state">还没有记录，写下你的第一件事吧。</p>`;
     monthEntriesModal.hidden = false;
     return;
@@ -894,7 +780,7 @@ function openMonthEntriesModal() {
   let currentDate = "";
   let dateGroup = null;
 
-  for (const entry of allEntries) {
+  for (const entry of visibleEntries) {
     if (entry.date !== currentDate) {
       currentDate = entry.date;
       const dateObj = fromDateKey(entry.date);
