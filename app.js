@@ -44,13 +44,25 @@ const cloudAccountButton = document.querySelector("#cloudAccountButton");
 const cloudAccountStatus = document.querySelector("#cloudAccountStatus");
 const cloudAuthModal = document.querySelector("#cloudAuthModal");
 const cloudAuthClose = document.querySelector("#cloudAuthClose");
-const cloudAuthForm = document.querySelector("#cloudAuthForm");
-const cloudEmail = document.querySelector("#cloudEmail");
-const cloudPassword = document.querySelector("#cloudPassword");
+const cloudAuthTitle = document.querySelector("#cloudAuthTitle");
+const cloudAuthDescription = document.querySelector("#cloudAuthDescription");
+const cloudSignedOutPanel = document.querySelector("#cloudSignedOutPanel");
+const cloudAuthModeButtons = document.querySelectorAll("[data-cloud-auth-mode]");
+const cloudSignInForm = document.querySelector("#cloudSignInForm");
+const cloudSignUpForm = document.querySelector("#cloudSignUpForm");
+const cloudSignInEmail = document.querySelector("#cloudSignInEmail");
+const cloudSignInPassword = document.querySelector("#cloudSignInPassword");
+const cloudSignUpEmail = document.querySelector("#cloudSignUpEmail");
+const cloudSignUpPassword = document.querySelector("#cloudSignUpPassword");
+const cloudSignUpPasswordConfirm = document.querySelector("#cloudSignUpPasswordConfirm");
 const cloudSignIn = document.querySelector("#cloudSignIn");
 const cloudSignUp = document.querySelector("#cloudSignUp");
 const cloudSignOut = document.querySelector("#cloudSignOut");
+const cloudSignedInPanel = document.querySelector("#cloudSignedInPanel");
 const cloudAccountEmail = document.querySelector("#cloudAccountEmail");
+const cloudAccountAvatar = document.querySelector("#cloudAccountAvatar");
+const cloudModalSyncStatus = document.querySelector("#cloudModalSyncStatus");
+const cloudSyncState = document.querySelector("#cloudSyncState");
 function showToast(message, type) {
   const container = document.querySelector("#toastContainer");
   if (!container) return;
@@ -97,6 +109,8 @@ let cloudUser = null;
 let cloudSyncTimer = null;
 let cloudSyncBusy = false;
 let isApplyingCloudState = false;
+let cloudAuthMode = "signin";
+let cloudStatus = { message: "未登录", tone: "idle" };
 
 document.querySelector("#prevMonth").addEventListener("click", () => {
   moveMonth(-1);
@@ -930,29 +944,72 @@ function escapeHtml(text) {
 }
 
 function setCloudStatus(message, tone) {
-  if (!cloudAccountStatus) return;
-  cloudAccountStatus.textContent = message;
-  cloudAccountStatus.dataset.tone = tone || "idle";
+  cloudStatus = { message, tone: tone || "idle" };
+  if (cloudAccountStatus) cloudAccountStatus.textContent = cloudStatus.message;
+  if (cloudAccountButton) {
+    cloudAccountButton.dataset.tone = cloudStatus.tone;
+    cloudAccountButton.setAttribute("aria-label", `云端同步：${cloudStatus.message}`);
+  }
+  if (cloudModalSyncStatus) cloudModalSyncStatus.textContent = cloudStatus.message;
+  if (cloudSyncState) cloudSyncState.dataset.tone = cloudStatus.tone;
+}
+
+function setCloudAuthMode(mode, shouldFocus) {
+  cloudAuthMode = mode === "signup" ? "signup" : "signin";
+  const isSignup = cloudAuthMode === "signup";
+
+  cloudAuthModeButtons.forEach((button) => {
+    const isActive = button.dataset.cloudAuthMode === cloudAuthMode;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+  });
+  if (cloudSignInForm) cloudSignInForm.hidden = isSignup;
+  if (cloudSignUpForm) cloudSignUpForm.hidden = !isSignup;
+  if (cloudAuthTitle) cloudAuthTitle.textContent = isSignup ? "创建云端账户" : "登录云端同步";
+  if (cloudAuthDescription) {
+    cloudAuthDescription.textContent = isSignup
+      ? "创建账户后，请验证邮箱。验证完成后即可在任意设备同步你的日历。"
+      : "登录后，日历会保留在本机，并自动同步到你的私有云端空间。";
+  }
+
+  if (shouldFocus && !cloudUser) {
+    const input = isSignup ? cloudSignUpEmail : cloudSignInEmail;
+    window.requestAnimationFrame(() => input?.focus());
+  }
+}
+
+function setCloudAuthBusy(isBusy) {
+  cloudAuthModeButtons.forEach((button) => {
+    button.disabled = isBusy;
+  });
+  if (cloudSignIn) cloudSignIn.disabled = isBusy;
+  if (cloudSignUp) cloudSignUp.disabled = isBusy;
 }
 
 function updateCloudAccountUi() {
   const isSignedIn = Boolean(cloudUser);
   cloudAccountButton?.classList.toggle("is-connected", isSignedIn);
-  cloudAuthForm.hidden = isSignedIn;
-  cloudAccountEmail.hidden = !isSignedIn;
-  cloudSignOut.hidden = !isSignedIn;
+  if (cloudSignedOutPanel) cloudSignedOutPanel.hidden = isSignedIn;
+  if (cloudSignedInPanel) cloudSignedInPanel.hidden = !isSignedIn;
+  if (cloudSignOut) cloudSignOut.hidden = !isSignedIn;
 
   if (isSignedIn) {
-    cloudAccountEmail.textContent = cloudUser.email || "已登录账户";
-    setCloudStatus("云端已连接", "success");
+    const email = cloudUser.email || "已登录账户";
+    if (cloudAccountEmail) cloudAccountEmail.textContent = email;
+    if (cloudAccountAvatar) cloudAccountAvatar.textContent = email.trim().charAt(0).toUpperCase() || "云";
+    if (cloudAuthTitle) cloudAuthTitle.textContent = "云端账户";
+    if (cloudStatus.tone === "idle") setCloudStatus("已连接", "success");
   } else {
-    setCloudStatus("云端同步", "idle");
+    setCloudAuthMode(cloudAuthMode);
+    setCloudStatus("未登录", "idle");
   }
 }
 
 function closeCloudModal() {
   cloudAuthModal.hidden = true;
-  cloudPassword.value = "";
+  [cloudSignInPassword, cloudSignUpPassword, cloudSignUpPasswordConfirm].forEach((input) => {
+    if (input) input.value = "";
+  });
 }
 
 function entryUpdatedAt(entry) {
@@ -1084,8 +1141,9 @@ async function handleCloudAuthentication(mode) {
     return;
   }
 
-  const email = cloudEmail.value.trim();
-  const password = cloudPassword.value;
+  const isSignup = mode === "signup";
+  const email = (isSignup ? cloudSignUpEmail : cloudSignInEmail).value.trim();
+  const password = isSignup ? cloudSignUpPassword.value : cloudSignInPassword.value;
   if (!email || !password) {
     showToast("请输入邮箱和密码。", "error");
     return;
@@ -1094,55 +1152,84 @@ async function handleCloudAuthentication(mode) {
     showToast("密码至少需要 6 位。", "error");
     return;
   }
+  if (isSignup && password !== cloudSignUpPasswordConfirm.value) {
+    showToast("两次输入的密码不一致。", "error");
+    cloudSignUpPasswordConfirm.focus();
+    return;
+  }
 
-  cloudSignIn.disabled = true;
-  cloudSignUp.disabled = true;
+  setCloudAuthBusy(true);
+  setCloudStatus(isSignup ? "正在创建" : "正在登录", "pending");
   const emailRedirectTo = window.location.protocol === "file:"
-    ? "https://yuehaxgu.github.io/yuehaxgu-daily-calendar/"
+    ? "https://cal.yuehaxgu.top/"
     : window.location.origin + window.location.pathname;
-  const result = mode === "signup"
-    ? await supabaseClient.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo },
-      })
-    : await supabaseClient.auth.signInWithPassword({ email, password });
-  cloudSignIn.disabled = false;
-  cloudSignUp.disabled = false;
+  let result;
+  try {
+    result = isSignup
+      ? await supabaseClient.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo },
+        })
+      : await supabaseClient.auth.signInWithPassword({ email, password });
+  } catch (error) {
+    console.error("Supabase authentication failed", error);
+    setCloudStatus(isSignup ? "创建失败" : "登录失败", "error");
+    showToast("网络连接失败，请稍后重试。", "error");
+    return;
+  } finally {
+    setCloudAuthBusy(false);
+  }
 
   if (result.error) {
+    setCloudStatus(isSignup ? "创建失败" : "登录失败", "error");
     showToast(result.error.message, "error");
     return;
   }
 
-  if (mode === "signup" && !result.data.session) {
+  if (isSignup && !result.data.session) {
+    cloudSignInEmail.value = email;
+    setCloudAuthMode("signin");
+    setCloudStatus("待验证邮箱", "pending");
     showToast("注册邮件已发送，请验证邮箱后再登录。", "success");
     return;
   }
 
-  showToast(mode === "signup" ? "账户已创建，正在同步数据。" : "登录成功，正在同步数据。", "success");
+  await syncCloudUser(result.data.user || result.data.session?.user);
+  showToast(isSignup ? "账户已创建，正在同步数据。" : "登录成功，正在同步数据。", "success");
 }
 
 cloudAccountButton?.addEventListener("click", () => {
   cloudAuthModal.hidden = false;
   updateCloudAccountUi();
-  if (!cloudUser) cloudEmail.focus();
+  if (!cloudUser) setCloudAuthMode(cloudAuthMode, true);
 });
 
 cloudAuthClose?.addEventListener("click", closeCloudModal);
 cloudAuthModal?.addEventListener("click", (event) => {
   if (event.target === cloudAuthModal) closeCloudModal();
 });
-cloudAuthForm?.addEventListener("submit", (event) => {
+cloudAuthModeButtons.forEach((button) => {
+  button.addEventListener("click", () => setCloudAuthMode(button.dataset.cloudAuthMode, true));
+});
+cloudSignInForm?.addEventListener("submit", (event) => {
   event.preventDefault();
   handleCloudAuthentication("signin");
 });
-cloudSignIn?.addEventListener("click", () => handleCloudAuthentication("signin"));
-cloudSignUp?.addEventListener("click", () => handleCloudAuthentication("signup"));
+cloudSignUpForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  handleCloudAuthentication("signup");
+});
 cloudSignOut?.addEventListener("click", async () => {
   if (!supabaseClient) return;
   const { error } = await supabaseClient.auth.signOut();
-  if (error) showToast(error.message, "error");
+  if (error) {
+    showToast(error.message, "error");
+    return;
+  }
+  await syncCloudUser(null);
+  setCloudAuthMode("signin");
+  showToast("已退出云端账户。", "info");
 });
 
 render();

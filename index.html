@@ -39,9 +39,12 @@
               <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
               <span class="theme-icon theme-icon-moon" aria-hidden="true">☾</span>
             </button>
-            <button class="cloud-status-button" id="cloudAccountButton" type="button">
+            <button class="cloud-status-button" id="cloudAccountButton" type="button" aria-haspopup="dialog" aria-controls="cloudAuthModal">
               <span class="cloud-status-dot" aria-hidden="true"></span>
-              <span id="cloudAccountStatus">云端同步</span>
+              <span class="cloud-status-copy">
+                <span class="cloud-status-label">云端同步</span>
+                <span id="cloudAccountStatus">未登录</span>
+              </span>
             </button>
             <div class="data-menu">
               <button class="tool-button" id="dataMenuButton" type="button">数据管理 ▾</button>
@@ -212,23 +215,57 @@
           </div>
           <button class="modal-close" id="cloudAuthClose" type="button" aria-label="关闭">&times;</button>
         </div>
-        <div class="modal-body">
-          <p class="cloud-auth-copy">登录后，日历会保留在本机，并自动同步到你的私有云端空间。</p>
-          <form id="cloudAuthForm" class="cloud-auth-form">
-            <label class="field" for="cloudEmail">
-              <span>邮箱</span>
-              <input id="cloudEmail" type="email" autocomplete="email" required />
-            </label>
-            <label class="field" for="cloudPassword">
-              <span>密码</span>
-              <input id="cloudPassword" type="password" autocomplete="current-password" minlength="6" required />
-            </label>
-            <div class="cloud-auth-actions">
-              <button class="submit-button" id="cloudSignIn" type="submit">登录</button>
-              <button class="ghost-button" id="cloudSignUp" type="button">创建账户</button>
+        <div class="modal-body cloud-auth-body">
+          <div id="cloudSignedOutPanel">
+            <p class="cloud-auth-copy" id="cloudAuthDescription">登录后，日历会保留在本机，并自动同步到你的私有云端空间。</p>
+            <div class="cloud-auth-tabs" role="tablist" aria-label="账户操作">
+              <button class="cloud-auth-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="cloudSignInForm" data-cloud-auth-mode="signin">登录</button>
+              <button class="cloud-auth-tab" type="button" role="tab" aria-selected="false" aria-controls="cloudSignUpForm" data-cloud-auth-mode="signup">创建账户</button>
             </div>
-          </form>
-          <div class="cloud-signed-in" id="cloudAccountEmail" hidden></div>
+            <form id="cloudSignInForm" class="cloud-auth-form" role="tabpanel">
+              <label class="field" for="cloudSignInEmail">
+                <span>邮箱</span>
+                <input id="cloudSignInEmail" type="email" autocomplete="email" required />
+              </label>
+              <label class="field" for="cloudSignInPassword">
+                <span>密码</span>
+                <input id="cloudSignInPassword" type="password" autocomplete="current-password" minlength="6" required />
+              </label>
+              <button class="submit-button cloud-auth-submit" id="cloudSignIn" type="submit">登录并同步</button>
+            </form>
+            <form id="cloudSignUpForm" class="cloud-auth-form" role="tabpanel" hidden>
+              <label class="field" for="cloudSignUpEmail">
+                <span>邮箱</span>
+                <input id="cloudSignUpEmail" type="email" autocomplete="email" required />
+              </label>
+              <label class="field" for="cloudSignUpPassword">
+                <span>设置密码</span>
+                <input id="cloudSignUpPassword" type="password" autocomplete="new-password" minlength="6" required />
+              </label>
+              <label class="field" for="cloudSignUpPasswordConfirm">
+                <span>确认密码</span>
+                <input id="cloudSignUpPasswordConfirm" type="password" autocomplete="new-password" minlength="6" required />
+              </label>
+              <button class="submit-button cloud-auth-submit" id="cloudSignUp" type="submit">创建账户</button>
+            </form>
+          </div>
+          <section class="cloud-signed-in" id="cloudSignedInPanel" hidden aria-live="polite">
+            <div class="cloud-account-profile">
+              <span class="cloud-account-avatar" id="cloudAccountAvatar" aria-hidden="true">云</span>
+              <div>
+                <p>已登录账户</p>
+                <strong id="cloudAccountEmail">--</strong>
+              </div>
+            </div>
+            <div class="cloud-sync-state" id="cloudSyncState" data-tone="idle">
+              <span class="cloud-sync-state-dot" aria-hidden="true"></span>
+              <div>
+                <p>同步状态</p>
+                <strong id="cloudModalSyncStatus">未登录</strong>
+              </div>
+            </div>
+            <p class="cloud-signed-in-copy">日历数据会自动保存在本机，并同步到你的私有云端空间。</p>
+          </section>
           <button class="ghost-button cloud-sign-out" id="cloudSignOut" type="button" hidden>退出登录</button>
         </div>
       </div>
