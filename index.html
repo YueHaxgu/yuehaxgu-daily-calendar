@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <title>每日记录日历</title>
+    <script>
+      try {
+        if (localStorage.getItem("daily-calendar-theme") === "light") {
+          document.documentElement.dataset.theme = "light";
+        }
+      } catch {}
+    </script>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='4' width='26' height='24' rx='3' fill='%234dd4ac'/%3E%3Crect x='3' y='4' width='26' height='8' rx='3' fill='%231fa67e'/%3E%3Crect x='7' y='2' width='3' height='5' rx='1.5' fill='%2394a3b8'/%3E%3Crect x='22' y='2' width='3' height='5' rx='1.5' fill='%2394a3b8'/%3E%3Ctext x='16' y='23' text-anchor='middle' fill='%2306231d' font-size='14' font-weight='bold' font-family='system-ui'%3E%E2%9C%93%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="workspace" aria-label="每日记录日历">
+        <header class="app-header">
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true">✓</span>
+            <div>
+              <p class="eyebrow">Daily Log</p>
+              <h1>每日记录日历</h1>
+            </div>
+          </div>
+
+          <div class="header-actions">
+            <button
+              class="icon-button theme-toggle"
+              id="themeToggle"
+              type="button"
+              aria-label="切换昼夜模式"
+              aria-pressed="false"
+              title="切换昼夜模式"
+            >
+              <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
+              <span class="theme-icon theme-icon-moon" aria-hidden="true">☾</span>
+            </button>
+            <div class="data-menu">
+              <button class="tool-button" id="dataMenuButton" type="button">数据管理 ▾</button>
+              <div class="data-dropdown" id="dataDropdown" hidden>
+                <button type="button" data-action="export-month">📄 导出本月</button>
+                <button type="button" data-action="export-all">💾 备份全部</button>
+                <button type="button" data-action="import" class="danger">📂 恢复备份</button>
+              </div>
+              <input id="restoreFile" type="file" accept="application/json,.json" hidden />
+            </div>
+            <div class="month-controls" aria-label="月份切换">
+              <button class="icon-button" id="prevMonth" type="button" aria-label="上个月" title="上个月">
+                <span aria-hidden="true">‹</span>
+              </button>
+              <div class="month-title" id="monthTitle"></div>
+              <button class="icon-button" id="nextMonth" type="button" aria-label="下个月" title="下个月">
+                <span aria-hidden="true">›</span>
+              </button>
+              <button class="today-button" id="todayButton" type="button">今天</button>
+            </div>
+          </div>
+        </header>
+
+        <div class="summary-grid" aria-label="记录概览">
+          <article>
+            <span id="monthEntryTotal">0</span>
+            <p>本月记录</p>
+          </article>
+          <article>
+            <span id="activeDayTotal">0</span>
+            <p>记录天数</p>
+          </article>
+          <article>
+            <span id="importantTotal">0</span>
+            <p>重要记录</p>
+          </article>
+          <article>
+            <span id="topCategory">暂无</span>
+            <p>最多分类</p>
+          </article>
+        </div>
+
+        <div class="filter-panel">
+          <label class="field search-field" for="searchInput">
+            <span>搜索</span>
+            <input id="searchInput" type="search" placeholder="关键词、分类、心情..." />
+          </label>
+          <div class="filter-actions">
+            <button class="tool-button" id="filterAllButton" type="button">全部</button>
+            <button class="tool-button reset-button" id="resetFilters" type="button">重置</button>
+          </div>
+        </div>
+
+        <div class="category-chips" id="categoryChips" aria-label="分类统计"></div>
+
+        <div class="calendar-card">
+          <div class="weekdays" aria-hidden="true">
+            <span>周一</span>
+            <span>周二</span>
+            <span>周三</span>
+            <span>周四</span>
+            <span>周五</span>
+            <span>周六</span>
+            <span>周日</span>
+          </div>
+          <div class="calendar-grid" id="calendarGrid"></div>
+        </div>
+      </section>
+
+      <aside class="entry-panel" aria-label="每日记录编辑">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Selected Day</p>
+            <h2 id="selectedDateTitle"></h2>
+          </div>
+          <span class="entry-count" id="entryCount"></span>
+        </div>
+
+        <div class="day-insight" id="dayInsight"></div>
+
+        <form id="entryForm" class="entry-form">
+          <div class="form-row">
+            <label class="field" for="entryCategory">
+              <span>分类</span>
+              <select id="entryCategory"></select>
+            </label>
+            <label class="field" for="entryMood">
+              <span>心情</span>
+              <select id="entryMood">
+                <option value="平静">平静</option>
+                <option value="开心">开心</option>
+                <option value="专注">专注</option>
+                <option value="疲惫">疲惫</option>
+                <option value="有压力">有压力</option>
+              </select>
+            </label>
+          </div>
+
+          <button id="manageCategoriesBtn" class="ghost-button" type="button" style="width:100%">📁 管理分类</button>
+
+          <div id="editTimeOverlay">
+            <label class="field" for="editTime">
+              <span>修改记录时间</span>
+              <input id="editTime" type="time" />
+            </label>
+          </div>
+
+          <label class="field" for="entryText">
+            <span>今天做了什么</span>
+            <textarea
+              id="entryText"
+              rows="5"
+              placeholder="例如：完成项目整理、读了 30 页书、跑步 3 公里..."
+              required
+            ></textarea>
+          </label>
+
+          <label class="important-check">
+            <input id="entryImportant" type="checkbox" />
+            <span class="toggle-track"></span>
+            <span>标为重要</span>
+          </label>
+
+          <div class="form-actions">
+            <button class="submit-button" id="submitEntry" type="submit">添加记录</button>
+            <button class="ghost-button cancel-edit" id="cancelEdit" type="button" hidden>取消编辑</button>
+          </div>
+        </form>
+
+        <div class="entries" id="entries"></div>
+      </aside>
+    </main>
+    <!-- Category manager modal -->
+    <div class="modal-overlay" id="categoryModal" hidden>
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h2>分类管理</h2>
+          <button class="modal-close" id="modalClose" type="button" aria-label="关闭">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-add-row">
+            <input id="modalCategoryInput" type="text" maxlength="12" placeholder="输入新分类名称..." />
+            <button id="modalAddCategory" class="tool-button" type="button">添加</button>
+          </div>
+          <div class="modal-category-list" id="modalCategoryList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Month entries modal -->
+    <div class="modal-overlay" id="monthEntriesModal" hidden>
+      <div class="modal-dialog modal-lg">
+        <div class="modal-header">
+          <h2 id="monthEntriesTitle">本月记录</h2>
+          <button class="modal-close" id="monthEntriesClose" type="button" aria-label="关闭">&times;</button>
+        </div>
+        <div class="modal-body" id="monthEntriesBody">
+          <p class="empty-state">加载中...</p>
+        </div>
+      </div>
+    </div>
+    <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+    <template id="entryTemplate">
+      <article class="entry-item">
+        <div class="entry-meta">
+          <span class="entry-category"></span>
+          <span class="entry-mood"></span>
+          <span class="entry-important">重要</span>
+        </div>
+        <div class="entry-time"></div>
+        <p class="entry-text"></p>
+        <div class="entry-actions">
+          <button class="entry-action edit-entry" type="button">编辑</button>
+          <button class="entry-action toggle-important" type="button"></button>
+          <button class="entry-action delete-entry" type="button" aria-label="删除记录" title="删除">×</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
