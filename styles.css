@@ -265,6 +265,46 @@ h2 {
   gap: 10px;
 }
 
+.cloud-status-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.cloud-status-button:hover {
+  border-color: rgba(77, 212, 172, 0.48);
+  background: rgba(77, 212, 172, 0.1);
+  color: var(--ink);
+}
+
+.cloud-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted-dim);
+}
+
+.cloud-status-button.is-connected {
+  border-color: rgba(77, 212, 172, 0.34);
+  color: var(--brand);
+}
+
+.cloud-status-button.is-connected .cloud-status-dot {
+  background: var(--brand);
+  box-shadow: 0 0 10px var(--brand-glow);
+}
+
 .month-controls {
   height: 48px;
   gap: 6px;
@@ -1539,6 +1579,47 @@ h2 {
   overflow-y: auto;
 }
 
+.cloud-auth-dialog {
+  width: min(420px, calc(100% - 20px));
+}
+
+.cloud-auth-copy {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.cloud-auth-form {
+  display: grid;
+  gap: 14px;
+}
+
+.cloud-auth-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.cloud-auth-actions .ghost-button,
+.cloud-sign-out {
+  min-height: 40px;
+  padding: 0 14px;
+}
+
+.cloud-signed-in {
+  min-height: 42px;
+  margin-bottom: 12px;
+  padding: 11px 12px;
+  border: 1px solid rgba(77, 212, 172, 0.28);
+  border-radius: var(--radius-md);
+  background: rgba(77, 212, 172, 0.08);
+  color: var(--brand);
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
 .modal-add-row {
   display: flex;
   gap: 8px;
@@ -1905,6 +1986,8 @@ h2 {
 
   .header-actions .data-menu {
     min-width: 0;
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 
   .header-actions .data-menu .tool-button {
@@ -1913,11 +1996,20 @@ h2 {
 
   .header-actions .month-controls {
     grid-column: 1 / -1;
-    grid-row: 2;
+    grid-row: 3;
   }
 
   .header-actions .theme-toggle {
     justify-self: start;
+  }
+
+  .header-actions .cloud-status-button {
+    justify-self: stretch;
+    justify-content: center;
+  }
+
+  .cloud-auth-actions {
+    grid-template-columns: 1fr;
   }
 
   .summary-grid {

@@ -39,6 +39,10 @@
               <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
               <span class="theme-icon theme-icon-moon" aria-hidden="true">☾</span>
             </button>
+            <button class="cloud-status-button" id="cloudAccountButton" type="button">
+              <span class="cloud-status-dot" aria-hidden="true"></span>
+              <span id="cloudAccountStatus">云端同步</span>
+            </button>
             <div class="data-menu">
               <button class="tool-button" id="dataMenuButton" type="button">数据管理 ▾</button>
               <div class="data-dropdown" id="dataDropdown" hidden>
@@ -199,6 +203,36 @@
         </div>
       </div>
     </div>
+    <div class="modal-overlay" id="cloudAuthModal" hidden>
+      <div class="modal-dialog cloud-auth-dialog" role="dialog" aria-modal="true" aria-labelledby="cloudAuthTitle">
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Cloud Sync</p>
+            <h2 id="cloudAuthTitle">云端同步</h2>
+          </div>
+          <button class="modal-close" id="cloudAuthClose" type="button" aria-label="关闭">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="cloud-auth-copy">登录后，日历会保留在本机，并自动同步到你的私有云端空间。</p>
+          <form id="cloudAuthForm" class="cloud-auth-form">
+            <label class="field" for="cloudEmail">
+              <span>邮箱</span>
+              <input id="cloudEmail" type="email" autocomplete="email" required />
+            </label>
+            <label class="field" for="cloudPassword">
+              <span>密码</span>
+              <input id="cloudPassword" type="password" autocomplete="current-password" minlength="6" required />
+            </label>
+            <div class="cloud-auth-actions">
+              <button class="submit-button" id="cloudSignIn" type="submit">登录</button>
+              <button class="ghost-button" id="cloudSignUp" type="button">创建账户</button>
+            </div>
+          </form>
+          <div class="cloud-signed-in" id="cloudAccountEmail" hidden></div>
+          <button class="ghost-button cloud-sign-out" id="cloudSignOut" type="button" hidden>退出登录</button>
+        </div>
+      </div>
+    </div>
     <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
     <template id="entryTemplate">
@@ -218,6 +252,7 @@
       </article>
     </template>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js"></script>
   </body>
 </html>

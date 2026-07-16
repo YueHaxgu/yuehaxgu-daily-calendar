@@ -5,6 +5,10 @@ const defaultCategories = ["工作", "学习", "生活", "运动", "阅读"];
 const fallbackCategory = "生活";
 const allCategory = "全部";
 const categoryColors = ["#4dd4ac", "#7dd3fc", "#f59e57", "#a78bfa", "#fb7185", "#facc15", "#60a5fa"];
+const supabaseUrl = "https://motlvavfznjenkecyshu.supabase.co";
+const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1vdGx2YXZmem5qZW5rZWN5c2h1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyMDI4ODMsImV4cCI6MjA5OTc3ODg4M30.CADb-ywgy6wlhqojJGjAohPBL2Ujj0e3uDq_kTnSNv0";
+const cloudStateTable = "calendar_state";
+const supabaseClient = window.supabase?.createClient?.(supabaseUrl, supabaseAnonKey);
 
 const calendarGrid = document.querySelector("#calendarGrid");
 const monthTitle = document.querySelector("#monthTitle");
@@ -36,6 +40,17 @@ const cancelEdit = document.querySelector("#cancelEdit");
 const editTime = document.querySelector("#editTime");
 const editTimeOverlay = document.querySelector("#editTimeOverlay");
 const entryTemplate = document.querySelector("#entryTemplate");
+const cloudAccountButton = document.querySelector("#cloudAccountButton");
+const cloudAccountStatus = document.querySelector("#cloudAccountStatus");
+const cloudAuthModal = document.querySelector("#cloudAuthModal");
+const cloudAuthClose = document.querySelector("#cloudAuthClose");
+const cloudAuthForm = document.querySelector("#cloudAuthForm");
+const cloudEmail = document.querySelector("#cloudEmail");
+const cloudPassword = document.querySelector("#cloudPassword");
+const cloudSignIn = document.querySelector("#cloudSignIn");
+const cloudSignUp = document.querySelector("#cloudSignUp");
+const cloudSignOut = document.querySelector("#cloudSignOut");
+const cloudAccountEmail = document.querySelector("#cloudAccountEmail");
 function showToast(message, type) {
   const container = document.querySelector("#toastContainer");
   if (!container) return;
@@ -78,6 +93,10 @@ let searchTerm = "";
 let editingEntryId = null;
 let categories = loadCategories();
 let entriesByDate = normalizeEntries(loadEntries());
+let cloudUser = null;
+let cloudSyncTimer = null;
+let cloudSyncBusy = false;
+let isApplyingCloudState = false;
 
 document.querySelector("#prevMonth").addEventListener("click", () => {
   moveMonth(-1);
@@ -161,6 +180,7 @@ function doExportMonth() {
 function doExportAll() {
   const data = {
     exportedAt: new Date().toISOString(),
+    categories,
     entries: Object.entries(entriesByDate).flatMap(([date, entries]) =>
       entries.map((entry) => ({ date, ...entry }))
     ),
@@ -195,14 +215,15 @@ restoreFile.addEventListener("change", (event) => {
       for (const entry of data.entries) {
         if (!entry.date || !entry.id || !entry.text) continue;
         const dateKey = entry.date;
-        delete entry.date;
         const normalEntry = {
           id: entry.id,
           category: entry.category ?? fallbackCategory,
           mood: entry.mood ?? "平静",
           important: entry.important === true,
+          time: entry.time ?? "",
           text: entry.text,
           createdAt: entry.createdAt ?? new Date().toISOString(),
+          updatedAt: entry.updatedAt,
         };
         if (!imported[dateKey]) imported[dateKey] = [];
         imported[dateKey].push(normalEntry);
@@ -213,6 +234,10 @@ restoreFile.addEventListener("change", (event) => {
         return;
       }
       entriesByDate = imported;
+      if (Array.isArray(data.categories)) {
+        categories = normalizeCategories(data.categories);
+        saveCategories();
+      }
       saveEntries();
       render();
       showToast("\u6062\u590D\u5907\u4EFD\u6210\u529F\uFF0C\u5171" + replaceCount + "\u6761\u8BB0\u5F55", "success");
@@ -780,18 +805,24 @@ function loadEntries() {
 
 function loadCategories() {
   try {
-    const stored = JSON.parse(localStorage.getItem(categoriesStorageKey));
-    return Array.isArray(stored) && stored.length ? [...new Set([...defaultCategories, ...stored])] : defaultCategories;
+    return normalizeCategories(JSON.parse(localStorage.getItem(categoriesStorageKey)));
   } catch {
     return defaultCategories;
   }
 }
 
+function normalizeCategories(rawCategories) {
+  if (!Array.isArray(rawCategories)) return [...defaultCategories];
+  const validCategories = rawCategories.filter((category) => typeof category === "string" && category.trim());
+  return [...new Set([...defaultCategories, ...validCategories])];
+}
+
 function normalizeEntries(rawEntries) {
+  if (!rawEntries || typeof rawEntries !== "object") return {};
   return Object.fromEntries(
-    Object.entries(rawEntries).map(([dateKey, entries]) => [
-      dateKey,
-      entries.map((entry) => ({
+    Object.entries(rawEntries).flatMap(([dateKey, entries]) => {
+      if (!Array.isArray(entries)) return [];
+      return [[dateKey, entries.map((entry) => ({
         id: entry.id ?? crypto.randomUUID(),
         category: entry.category ?? fallbackCategory,
         mood: entry.mood ?? "平静",
@@ -799,17 +830,20 @@ function normalizeEntries(rawEntries) {
         time: entry.time ?? "",
         text: entry.text ?? "",
         createdAt: entry.createdAt ?? new Date().toISOString(),
-      })),
-    ]),
+        updatedAt: entry.updatedAt,
+      }))]];
+    }),
   );
 }
 
 function saveEntries() {
   localStorage.setItem(entriesStorageKey, JSON.stringify(entriesByDate));
+  scheduleCloudSync();
 }
 
 function saveCategories() {
   localStorage.setItem(categoriesStorageKey, JSON.stringify(categories));
+  scheduleCloudSync();
 }
 
 // Month entries modal - click handler (event delegation)
@@ -895,5 +929,221 @@ function escapeHtml(text) {
   return div.innerHTML.replace(/\n/g, "<br>");
 }
 
+function setCloudStatus(message, tone) {
+  if (!cloudAccountStatus) return;
+  cloudAccountStatus.textContent = message;
+  cloudAccountStatus.dataset.tone = tone || "idle";
+}
+
+function updateCloudAccountUi() {
+  const isSignedIn = Boolean(cloudUser);
+  cloudAccountButton?.classList.toggle("is-connected", isSignedIn);
+  cloudAuthForm.hidden = isSignedIn;
+  cloudAccountEmail.hidden = !isSignedIn;
+  cloudSignOut.hidden = !isSignedIn;
+
+  if (isSignedIn) {
+    cloudAccountEmail.textContent = cloudUser.email || "已登录账户";
+    setCloudStatus("云端已连接", "success");
+  } else {
+    setCloudStatus("云端同步", "idle");
+  }
+}
+
+function closeCloudModal() {
+  cloudAuthModal.hidden = true;
+  cloudPassword.value = "";
+}
+
+function entryUpdatedAt(entry) {
+  const timestamp = Date.parse(entry.updatedAt || entry.createdAt || "");
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function mergeEntries(...entryStates) {
+  const entriesByIdAndDate = new Map();
+
+  entryStates.forEach((entryState) => {
+    Object.entries(entryState).forEach(([dateKey, entries]) => {
+      const entriesById = entriesByIdAndDate.get(dateKey) ?? new Map();
+      entries.forEach((entry) => {
+        const existing = entriesById.get(entry.id);
+        if (!existing || entryUpdatedAt(entry) >= entryUpdatedAt(existing)) {
+          entriesById.set(entry.id, entry);
+        }
+      });
+      entriesByIdAndDate.set(dateKey, entriesById);
+    });
+  });
+
+  return Object.fromEntries(
+    [...entriesByIdAndDate.entries()].map(([dateKey, entriesById]) => [dateKey, [...entriesById.values()]]),
+  );
+}
+
+function scheduleCloudSync() {
+  if (!supabaseClient || !cloudUser || isApplyingCloudState) return;
+  if (cloudSyncTimer) clearTimeout(cloudSyncTimer);
+  cloudSyncTimer = window.setTimeout(() => {
+    cloudSyncTimer = null;
+    syncCalendarToCloud();
+  }, 600);
+}
+
+async function syncCalendarToCloud() {
+  if (!supabaseClient || !cloudUser) return;
+  if (cloudSyncBusy) {
+    scheduleCloudSync();
+    return;
+  }
+
+  cloudSyncBusy = true;
+  setCloudStatus("正在同步", "pending");
+  const { error } = await supabaseClient.from(cloudStateTable).upsert({
+    user_id: cloudUser.id,
+    entries: entriesByDate,
+    categories,
+    updated_at: new Date().toISOString(),
+  });
+  cloudSyncBusy = false;
+
+  if (error) {
+    console.error("Supabase sync failed", error);
+    setCloudStatus("同步失败", "error");
+    showToast("云端同步失败，请稍后重试。", "error");
+    return;
+  }
+
+  setCloudStatus("已同步", "success");
+}
+
+async function loadCloudState() {
+  if (!supabaseClient || !cloudUser) return;
+
+  setCloudStatus("正在读取", "pending");
+  const { data, error } = await supabaseClient
+    .from(cloudStateTable)
+    .select("entries, categories")
+    .eq("user_id", cloudUser.id)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Supabase load failed", error);
+    setCloudStatus("同步不可用", "error");
+    showToast("无法读取云端数据，请确认 Supabase 已完成配置。", "error");
+    return;
+  }
+
+  isApplyingCloudState = true;
+  entriesByDate = mergeEntries(
+    normalizeEntries(data?.entries),
+    normalizeEntries(entriesByDate),
+  );
+  categories = normalizeCategories([...(data?.categories ?? []), ...categories]);
+  localStorage.setItem(entriesStorageKey, JSON.stringify(entriesByDate));
+  localStorage.setItem(categoriesStorageKey, JSON.stringify(categories));
+  isApplyingCloudState = false;
+  render();
+  scheduleCloudSync();
+}
+
+async function syncCloudUser(nextUser) {
+  const userChanged = nextUser?.id !== cloudUser?.id;
+  cloudUser = nextUser ?? null;
+  updateCloudAccountUi();
+
+  if (cloudUser && userChanged) {
+    await loadCloudState();
+  }
+}
+
+async function initializeCloudSync() {
+  if (!supabaseClient) {
+    setCloudStatus("云端不可用", "error");
+    return;
+  }
+
+  const { data, error } = await supabaseClient.auth.getSession();
+  if (error) {
+    console.error("Supabase session failed", error);
+    setCloudStatus("云端不可用", "error");
+    return;
+  }
+
+  await syncCloudUser(data.session?.user);
+  supabaseClient.auth.onAuthStateChange((_event, session) => {
+    window.setTimeout(() => {
+      syncCloudUser(session?.user);
+    }, 0);
+  });
+}
+
+async function handleCloudAuthentication(mode) {
+  if (!supabaseClient) {
+    showToast("云端服务当前不可用。", "error");
+    return;
+  }
+
+  const email = cloudEmail.value.trim();
+  const password = cloudPassword.value;
+  if (!email || !password) {
+    showToast("请输入邮箱和密码。", "error");
+    return;
+  }
+  if (password.length < 6) {
+    showToast("密码至少需要 6 位。", "error");
+    return;
+  }
+
+  cloudSignIn.disabled = true;
+  cloudSignUp.disabled = true;
+  const emailRedirectTo = window.location.protocol === "file:"
+    ? "https://yuehaxgu.github.io/yuehaxgu-daily-calendar/"
+    : window.location.origin + window.location.pathname;
+  const result = mode === "signup"
+    ? await supabaseClient.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo },
+      })
+    : await supabaseClient.auth.signInWithPassword({ email, password });
+  cloudSignIn.disabled = false;
+  cloudSignUp.disabled = false;
+
+  if (result.error) {
+    showToast(result.error.message, "error");
+    return;
+  }
+
+  if (mode === "signup" && !result.data.session) {
+    showToast("注册邮件已发送，请验证邮箱后再登录。", "success");
+    return;
+  }
+
+  showToast(mode === "signup" ? "账户已创建，正在同步数据。" : "登录成功，正在同步数据。", "success");
+}
+
+cloudAccountButton?.addEventListener("click", () => {
+  cloudAuthModal.hidden = false;
+  updateCloudAccountUi();
+  if (!cloudUser) cloudEmail.focus();
+});
+
+cloudAuthClose?.addEventListener("click", closeCloudModal);
+cloudAuthModal?.addEventListener("click", (event) => {
+  if (event.target === cloudAuthModal) closeCloudModal();
+});
+cloudAuthForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  handleCloudAuthentication("signin");
+});
+cloudSignIn?.addEventListener("click", () => handleCloudAuthentication("signin"));
+cloudSignUp?.addEventListener("click", () => handleCloudAuthentication("signup"));
+cloudSignOut?.addEventListener("click", async () => {
+  if (!supabaseClient) return;
+  const { error } = await supabaseClient.auth.signOut();
+  if (error) showToast(error.message, "error");
+});
 
 render();
+initializeCloudSync();
